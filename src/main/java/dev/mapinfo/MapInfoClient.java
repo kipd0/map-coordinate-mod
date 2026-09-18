@@ -11,7 +11,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
@@ -36,18 +35,13 @@ public final class MapInfoClient implements ClientModInitializer {
     public void onInitializeClient() {
 
         inspectKey = KeyBindingHelper.registerKeyBinding(
-            new KeyMapping(
-                "key.mapinfo.inspect",
-                InputConstants.Type.KEYSYM,
-                InputConstants.KEY_J,
-                KeyMapping.Category.register(
-                    ResourceLocation.fromNamespaceAndPath(
-                        "mapinfo",
-                        "main"
-                    )
-                )
-            )
-        );
+    new KeyMapping(
+        "key.mapinfo.inspect",
+        InputConstants.Type.KEYSYM,
+        InputConstants.KEY_J,
+        KeyMapping.Category.MISC
+    )
+);
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (inspectKey.consumeClick()) {
