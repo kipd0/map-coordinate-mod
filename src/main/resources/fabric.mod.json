@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "mapinfo",
+  "version": "${version}",
+  "name": "Map Info",
+  "description": "Shows creator and stored location for a held filled map.",
+  "environment": "client",
+  "entrypoints": { "client": ["dev.mapinfo.MapInfoClient"] },
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
