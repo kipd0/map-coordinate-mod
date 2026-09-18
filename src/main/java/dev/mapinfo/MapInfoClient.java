@@ -4,103 +4,264 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
-import net.minecraft.world.item.component.MapId;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class MapInfoClient implements ClientModInitializer {
+
     private static final Pattern LOCATION = Pattern.compile(
-        "(-?\\d+(?:\\.\\d+)?)\\s+(-?\\d+(?:\\.\\d+)?)\\s+(-?\\d+(?:\\.\\d+)?)\\s+([A-Za-z0-9_:\\-]+)"
+        "(-?\\d+(?:\\.\\d+)?)\\s+" +
+        "(-?\\d+(?:\\.\\d+)?)\\s+" +
+        "(-?\\d+(?:\\.\\d+)?)\\s+" +
+        "([A-Za-z0-9_:\\-]+)"
     );
-    private static KeyMapping key;
+
+    private static KeyMapping inspectKey;
 
     @Override
     public void onInitializeClient() {
-        key = KeyBindingHelper.registerKeyBinding(new KeyMapping(
-            "key.mapinfo.inspect", InputConstants.Type.KEYSYM, InputConstants.KEY_J, "category.mapinfo"
-        ));
+
+        inspectKey = KeyBindingHelper.registerKeyBinding(
+            new KeyMapping(
+                "key.mapinfo.inspect",
+                InputConstants.Type.KEYSYM,
+                InputConstants.KEY_J,
+                KeyMapping.Category.register(
+                    ResourceLocation.fromNamespaceAndPath(
+                        "mapinfo",
+                        "main"
+                    )
+                )
+            )
+        );
+
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (key.consumeClick()) inspect(client);
+            while (inspectKey.consumeClick()) {
+                inspectHeldMap(client);
+            }
         });
     }
 
-    private static void inspect(Minecraft client) {
-        if (client.player == null) return;
+    private static void inspectHeldMap(Minecraft client) {
 
-        ItemStack stack = client.player.getMainHandItem();
-        if (!stack.is(Items.FILLED_MAP) && client.player.getOffhandItem().is(Items.FILLED_MAP))
-            stack = client.player.getOffhandItem();
-
-        if (!stack.is(Items.FILLED_MAP)) {
-            msg(client, "Hold a filled map first.", ChatFormatting.RED);
+        if (client.player == null) {
             return;
         }
 
-        String creator = null, location = null;
-        CustomData custom = stack.get(DataComponents.CUSTOM_DATA);
+        ItemStack stack = client.player.getMainHandItem();
 
-        if (custom != null) {
-            CompoundTag root = custom.copyTag();
-            CompoundTag values = compound(root, "PublicBukkitValues");
-            if (values != null) {
-                creator = string(values, "minecraft:mapcreator");
-                byte[] bytes = bytes(values, "minecraft:mapdlocats");
-                if (bytes != null) location = decode(bytes);
+        if (!stack.is(Items.FILLED_MAP)) {
+
+            ItemStack offhand = client.player.getOffhandItem();
+
+            if (offhand.is(Items.FILLED_MAP)) {
+                stack = offhand;
             }
         }
 
-        msg(client, "----- Map Info -----", ChatFormatting.GOLD);
-        MapId id = stack.get(DataComponents.MAP_ID);
-        if (id != null) msg(client, "Map ID: " + id.id(), ChatFormatting.GRAY);
-        msg(client, "Creator: " + (creator == null ? "not stored" : creator),
-            creator == null ? ChatFormatting.DARK_GRAY : ChatFormatting.AQUA);
-        msg(client, location == null ? "Location: not stored" : location,
-            location == null ? ChatFormatting.DARK_GRAY : ChatFormatting.GREEN);
+        if (!stack.is(Items.FILLED_MAP)) {
+
+            message(
+                client,
+                "Hold a filled map first.",
+                ChatFormatting.RED
+            );
+
+            return;
+        }
+
+        String creator = null;
+        String location = null;
+
+        CustomData customData =
+            stack.get(DataComponents.CUSTOM_DATA);
+
+        if (customData != null) {
+
+            CompoundTag root =
+                customData.copyTag();
+
+            Optional<CompoundTag> valuesOptional =
+                root.getCompound("PublicBukkitValues");
+
+            if (valuesOptional.isPresent()) {
+
+                CompoundTag values =
+                    valuesOptional.get();
+
+                creator =
+                    values
+                        .getString("minecraft:mapcreator")
+                        .orElse(null);
+
+                byte[] locationBytes =
+                    values
+                        .getByteArray("minecraft:mapdlocats")
+                        .orElse(null);
+
+                if (locationBytes != null) {
+                    location =
+                        decodeLocation(locationBytes);
+                }
+            }
+        }
+
+        message(
+            client,
+            "----- Map Info -----",
+            ChatFormatting.GOLD
+        );
+
+        /*
+         * We intentionally don't read MAP_ID here yet.
+         *
+         * Minecraft 1.21.11 changed the map ID component
+         * representation compared with older versions.
+         * Creator/location are the important DonutSMP fields.
+         */
+
+        if (creator != null && !creator.isBlank()) {
+
+            message(
+                client,
+                "Creator: " + creator,
+                ChatFormatting.AQUA
+            );
+
+        } else {
+
+            message(
+                client,
+                "Creator: not stored",
+                ChatFormatting.DARK_GRAY
+            );
+        }
+
+        if (location != null) {
+
+            message(
+                client,
+                location,
+                ChatFormatting.GREEN
+            );
+
+        } else {
+
+            message(
+                client,
+                "Location: not stored",
+                ChatFormatting.DARK_GRAY
+            );
+        }
     }
 
-    private static CompoundTag compound(CompoundTag t, String k) {
-        return t.contains(k, Tag.TAG_COMPOUND) ? t.getCompound(k).orElse(null) : null;
-    }
-    private static String string(CompoundTag t, String k) {
-        return t.contains(k, Tag.TAG_STRING) ? t.getString(k).orElse(null) : null;
-    }
-    private static byte[] bytes(CompoundTag t, String k) {
-        return t.contains(k, Tag.TAG_BYTE_ARRAY) ? t.getByteArray(k).orElse(null) : null;
-    }
+    private static String decodeLocation(byte[] data) {
 
-    private static String decode(byte[] data) {
-        String raw = new String(data, StandardCharsets.ISO_8859_1);
-        Matcher m = LOCATION.matcher(raw);
-        if (!m.find()) return null;
+        /*
+         * DonutSMP's mapdlocats contains a binary prefix,
+         * followed by readable coordinate data such as:
+         *
+         * 186285.93362665616 64.0
+         * 165430.15204459568 world
+         */
+
+        String raw =
+            new String(
+                data,
+                StandardCharsets.ISO_8859_1
+            );
+
+        Matcher matcher =
+            LOCATION.matcher(raw);
+
+        if (!matcher.find()) {
+            return null;
+        }
+
         try {
-            long x = Math.round(Double.parseDouble(m.group(1)));
-            long y = Math.round(Double.parseDouble(m.group(2)));
-            long z = Math.round(Double.parseDouble(m.group(3)));
-            String w = switch (m.group(4)) {
-                case "world" -> "Overworld";
-                case "world_nether" -> "Nether";
-                case "world_the_end" -> "The End";
-                default -> m.group(4);
-            };
-            return "Location: X " + x + ", Y " + y + ", Z " + z + " (" + w + ")";
+
+            double exactX =
+                Double.parseDouble(matcher.group(1));
+
+            double exactY =
+                Double.parseDouble(matcher.group(2));
+
+            double exactZ =
+                Double.parseDouble(matcher.group(3));
+
+            String world =
+                matcher.group(4);
+
+            long x =
+                Math.round(exactX);
+
+            long y =
+                Math.round(exactY);
+
+            long z =
+                Math.round(exactZ);
+
+            String prettyWorld =
+                switch (world) {
+
+                    case "world" ->
+                        "Overworld";
+
+                    case "world_nether" ->
+                        "Nether";
+
+                    case "world_the_end" ->
+                        "The End";
+
+                    default ->
+                        world;
+                };
+
+            return
+                "Location: X " +
+                x +
+                ", Y " +
+                y +
+                ", Z " +
+                z +
+                " (" +
+                prettyWorld +
+                ")";
+
         } catch (NumberFormatException e) {
+
             return null;
         }
     }
 
-    private static void msg(Minecraft c, String s, ChatFormatting color) {
-        if (c.player != null) c.player.displayClientMessage(Component.literal(s).withStyle(color), false);
+    private static void message(
+        Minecraft client,
+        String text,
+        ChatFormatting color
+    ) {
+
+        if (client.player != null) {
+
+            client.player.displayClientMessage(
+                Component
+                    .literal(text)
+                    .withStyle(color),
+                false
+            );
+        }
     }
 }
