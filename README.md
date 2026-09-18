@@ -4,7 +4,7 @@ Client-side mod. Hold a filled map and press **J**.
 
 Displays the vanilla map ID plus DonutSMP custom `mapcreator` and decoded
 `mapdlocats` fields when those fields are present.
-
+mod made by chatgpt btw 
 ## Build
 Use JDK 21 and Gradle, then run:
 
